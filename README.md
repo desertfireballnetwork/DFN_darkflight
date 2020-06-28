@@ -1,11 +1,22 @@
 # DFN_darkflight
 DFN implementation of meteor darkflight calculation
 
-easiest to run in a conda environment. Setup conda environment:
+setup
+-----
+It is easiest to run in a conda environment. install anaconda or miniconda, setup conda environment:
 conda create --name darkflight_env --file df_conda_spec.txt
 
 additionally, you need to setup STRM.py, see comment in DFN_darkflight.py for details.
 
+additionally you need nrlmsise atmosphere model, python interface, from:
+https://github.com/DeepHorizons/Python-NRLMSISE-00.git
+to provide the following files in the same folder:
+   nrlmsise_00_data.py
+   nrlmsise_00_header.py
+   nrlmsise_00.py
+
+usage
+-----
 edit the cfg file to match your meteorite
 edit the wind profile file to match your winds
 
@@ -14,15 +25,17 @@ python DFN_darkflight.py <options>
   -e EVENTFILE, --eventFile EVENTFILE
                         Event file for propagation [.ECSV, .CFG or .FITS]
   -w WINDFILE, --windFile WINDFILE
-                        Wind file for the corresponding event [.CSV]
+                        Wind file for the corresponding event [.CSV] (overrides cfg value)
   -v {eks,grits,raw}, --velocityModel {eks,grits,raw}
-                        Specify which velocity model to use for darkflight
+                        Specify which velocity model to use for darkflight. raw is preferred
   -m MASS, --mass MASS  Mass of the meteoroid, kg (default='fall-line')
   -d DENSITY, --density DENSITY
                         Density of the meteoroid (default=3500[kg/m3])
   -s SHAPE, --shape SHAPE
                         Specify the meteorite shape for the darkflight
                         (default=cylinder)
+                        values permitted are s, c, b (for sphere,cylinder,brick) 
+                        or a float for intermediate values
   -g H_GROUND, --h_ground H_GROUND
                         Height of the ground at landing site (m), float or 'a'
                         for auto, which uses SRTM data
@@ -41,4 +54,17 @@ python DFN_darkflight.py <options>
   -we WIND_ERR, --wind_err WIND_ERR
                         wind magnitude error in each layer as +/- for MC
                         (default=2.0 m/s)
+
+notes
+-----
+for monte carlo:
+-s 1.4 -se 0.15 will simulate drags of ~1.2 to ~1.6, matching the drag range of sphere to rounded brick
+
+If your system is set up appropriately, you can do:
+mpirun -n N python DFN_darkflight.py <options> -mc 1000
+for example, where the 1000 mc runs will be split accross N cores on a multicore processor. Its faster!
+
+-g a will use Shuttle Radar Topography (STRM) to get terrain heights, and autmatically set ground height.
+STRM covers +/-52 deg latitude. The ASTER dataset is file compatible, and has higher latitude coverage.
+You will need to download the appropriate files, and proably tweak the code, but file formats are the same.
 
