@@ -1,28 +1,27 @@
 # DFN_darkflight
 DFN implementation of meteor darkflight calculation
 
-setup
------
+## setup
 It is easiest to run in a conda environment. install anaconda or miniconda, setup conda environment:
-conda create --name darkflight_env --file df_conda_spec.txt
+`conda create --name darkflight_env --file df_conda_spec.txt`
 
-additionally, you need to setup the library STRM.py, see comment in DFN_darkflight.py for details.
+Additionally, you need to setup the library STRM.py, see comment in DFN_darkflight.py for details.
 The STRM data is downloaded to a cache, which is stored in a hardcoded directory within darkflight.py
-this is currently hardcoded to /home/dfn-user/. you need to modify this.
+this is currently hardcoded to `/home/dfn-user/`, you need to modify this line in DFN_darkflight.py
 
-additionally you need nrlmsise atmosphere model, python interface, from:
+Additionally you need nrlmsise atmosphere model python interface, from:
 https://github.com/DeepHorizons/Python-NRLMSISE-00.git
-to provide the following files in the same folder:
+to provide the following files in the same folder ad DFN_darkflight.py:
    nrlmsise_00_data.py
    nrlmsise_00_header.py
    nrlmsise_00.py
-the version in pypi is out of date, you need the git version.
+The version in pypi is out of date, you need the git version.
 
-usage
------
+## usage
 edit the cfg file to match your meteorite
 edit the wind profile file to match your winds
 
+```
 python DFN_darkflight.py <options>
   -h, --help            show this help message and exit
   -e EVENTFILE, --eventFile EVENTFILE
@@ -57,17 +56,17 @@ python DFN_darkflight.py <options>
   -we WIND_ERR, --wind_err WIND_ERR
                         wind magnitude error in each layer as +/- for MC
                         (default=2.0 m/s)
+```
 
-notes
------
+## notes
 for monte carlo:
--s 1.4 -se 0.15 will simulate drags of ~1.2 to ~1.6, matching the drag range of sphere to rounded brick
+`-s 1.4 -se 0.15` will simulate drags of ~1.2 to ~1.6, matching the drag range of sphere to rounded brick
 
 If your system is set up appropriately, you can do:
-mpirun -n N python DFN_darkflight.py <options> -mc 1000
-for example, where the 1000 mc runs will be split accross N cores on a multicore processor. Its faster!
+`mpirun -n N python DFN_darkflight.py <options> -mc 1000` (where N is the number of cores you want to use.)
+So the 1000 Montecarlo runs will be split accross N cores on a multicore processor. It's faster!
 
--g a will use Shuttle Radar Topography (STRM) to get terrain heights, and autmatically set ground height.
+`-g a` will use Shuttle Radar Topography (STRM) to get terrain heights, and automatically set ground height.
 STRM covers +/-52 deg latitude. The ASTER dataset is file compatible, and has higher latitude coverage.
 You will need to download the appropriate files, and proably tweak the code, but file formats are the same.
 
