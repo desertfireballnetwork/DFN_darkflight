@@ -8,19 +8,14 @@ propagating the position and velocity through the atmosphere using a
 Desert Fireball Network
 @author: Trent Jansen-Sturgeon, Martin Towner
 
-mct changes:
- shape as float option supported
- option to used SRTM to get ground elevation, rather than fixed h_ground, -g a
- geojson outputs option, -J 
- keyword in output directory name option, -K 
- Montecarlo supports uncertainties in winds, shape, mass.
- use NRLMSISE model for heights above wind model
- (search for #mct to find most changes)
-
 Install notes
 =============
  installing SRTM.py: use specific git version, not version from general pip, which is too old.
  /opt/anaconda3/envs/darkflight_env/bin/pip install git+https://github.com/tkrajina/srtm.py.git
+
+ for ground height = auto, the STRM data is downloaded to a cache, which is stored in a 
+ hardcoded directory /home/dfn-user/. you need to modify this
+
 """
 
 __author__ = "Trent Jansen-Sturgeon, Martin Towner"
@@ -227,23 +222,19 @@ def InitialiseMC(TriData, velType, mass, rho, shape,
     DarkDict0 = Initialise(TriData, velType, mass, rho, shape)
 
     #### v-- SET ERRORS HERE --v ####
-    c_mass_loss_err = 0.01 #[%] #mct from 0.05
-    #################################
+    c_mass_loss_err = 0.01 #[%]
     # Physical errors  -----------------------------------------------------------
     A = np.random.normal(DarkDict0['shape'], shape_err, size=mc) #<--- VERY sensitive to shape!
     c_ml = np.random.normal(DarkDict0['c_ml'], DarkDict0['c_ml']*c_mass_loss_err, size=mc)
     rho = np.random.normal(rho, rho_err, size=mc)
 
     if mass:
-#        M = truncnorm.rvs( loc=mass, scale=mass_err*mass, a=0, b=np.inf, size=mc)
-        #mct
         M = np.random.uniform( mass*(1-mass_err), mass*(1+mass_err), mc)
         # or
         #lower, upper = mass_err * mass, (mass_err + 1.0) * mass
         #mu, sigma = mass, mass_err*mass
         #M = truncnorm(
         #    (lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma, size=mc)a
-        #/mct
     else:
         M = np.random.uniform(0.01, 10, mc)
     print('mass, ', M)
@@ -352,9 +343,9 @@ def InitialiseParams(rho, shape):
         A = 1.60 # Circular cylinder
     elif shape == 'b':
         A = 2.7 # Brick
-    elif isinstance( float(shape), float): #mct
+    elif isinstance( float(shape), float): 
 #        print( 'shape float, ', shape)
-        A = float( shape) #/mct
+        A = float( shape)
     else:
         print('Not a valid shape. Please choose between '+
         "sphere ['s'], circular cylinder ['c'], or brick ['b']" ++
@@ -425,7 +416,6 @@ def Propagate(state0, args):
     X = state0.flatten()[1:] # Add mass to the state 
     [WindData, h_ground, windspd_err, winddir_err, mc] = args
 
-    # mct
     newWindData = copy.deepcopy(WindData)
     if mc: # Randomise every layer independently
         if type( newWindData) == Table: #wind profile
@@ -443,7 +433,6 @@ def Propagate(state0, args):
             #left untouched
 
     elevation_data = srtm.get_data( local_cache_dir = SRTM_cache )
-    #/mct
 
     # Initialise the time step
     #    R_sealevel = EarthRadius(ECEF2LLH(Pos_ECI)[0])
@@ -452,7 +441,7 @@ def Propagate(state0, args):
     state, T_rel = [], []
     def solout(t, X):
         state.extend([X.copy()]); T_rel.extend([t])
-        Pos_ECI = np.vstack( (X[:3]) ) #mct
+        Pos_ECI = np.vstack( (X[:3]) ) 
         Pos_ECF = ECI2ECEF_pos( Pos_ECI, t0+(t/(24*60*60)) )
         lt, ln, ht = ECEF2LLH( Pos_ECF)
         R_sealevel = EarthRadius( lt)
@@ -464,7 +453,7 @@ def Propagate(state0, args):
                 h_gnd = 0.0
         else:
             h_gnd = float( h_ground)
-        r_end = R_sealevel + h_gnd #/mct
+        r_end = R_sealevel + h_gnd 
         if norm(X[:3]) < r_end: # Reached ground or below
             return -1 # Ends the integration
         elif X[6] < 1e-3: # Lost all mass [<1g]
@@ -474,11 +463,11 @@ def Propagate(state0, args):
             return 0 # Continues integration
 
     # Setup integrator
-    dt0 = 0.1; dt_max = 3 #60 # sec #mct changed from 5 to 1
+    dt0 = 0.1; dt_max = 3 #60 # sec 
     solver = ode(EarthDynamics).set_integrator('dopri5', \
         first_step=dt0, max_step=dt_max, rtol=1e-4) #'dop853', 
     solver.set_solout(solout)
-    solver.set_initial_value(X, 0).set_f_params( newWindData, t0) #mct
+    solver.set_initial_value(X, 0).set_f_params( newWindData, t0)
 
     # Integrate with RK4 until impact
     t_max = np.inf
@@ -490,7 +479,7 @@ def Propagate(state0, args):
     
     # Make sure we end precisely on the ground, rather than below
     #so we backtrack a fraction of a step
-    Pos_ECF_final = ECI2ECEF_pos( X_all[:3,-1], T[-1] ) #mct
+    Pos_ECF_final = ECI2ECEF_pos( X_all[:3,-1], T[-1] ) 
     lt, ln, ht = ECEF2LLH( Pos_ECF_final)
     if h_ground == 'a':
         h_gnd = elevation_data.get_elevation( np.rad2deg(lt).item(), np.rad2deg(ln).item() )
@@ -498,7 +487,7 @@ def Propagate(state0, args):
             h_gnd = 0.0
             print('WARNING final ground issue, ', np.rad2deg(lt).item(), np.rad2deg(ln).item(), ht, X_all[6] )
     else:
-        h_gnd = float( h_ground) #/mct
+        h_gnd = float( h_ground)
     r_end = EarthRadius( lt) + h_gnd
     fraction = ( norm(X_all[:3,-2:-1]) - r_end ) / ( norm(X_all[:3,-2:-1]) - norm(X_all[:3,-1:]) )
     if len(X_all[0]) > 1:
@@ -591,7 +580,7 @@ def WriteToFile(DATA,
             ofile1 = '_darkflight_cfg_' + str(int(M[0]*1000)) + 'g'
             ofile3 = '_' + shape
 
-    elif len(M) < 1000: # Fall-line or small num particles #mct was 100
+    elif len(M) < 1000: # Fall-line or small num particles
         ofile_ext = '.ecsv'
         if fileType ==  'ecsv':
             ofile1 = '_darkflight_fall_line'
@@ -639,11 +628,11 @@ def WriteToFile(DATA,
         elif fileType != 'fits' and not mc: # Fall-line
             Points(DarkFile, np.round(M,3), colour='ff1400ff') # red points
             if geoj:
-                dfn_utils.KMLs_to_geosjon((rootfile + '_points.kml',), rootfile + '_points.geojson') #mct
+                dfn_utils.KMLs_to_geosjon((rootfile + '_points.kml',), rootfile + '_points.geojson')
         else:
             Points(DarkFile)
             if geoj:
-                dfn_utils.KMLs_to_geosjon((rootfile + '_points.kml',), rootfile + '_points.geojson') #mct
+                dfn_utils.KMLs_to_geosjon((rootfile + '_points.kml',), rootfile + '_points.geojson') 
         print(''.join( ['kml written, ', str(rootfile), '\n']) )
         if geoj:
             print(''.join( ['json written, ', str(rootfile), '\n']) )
@@ -744,7 +733,7 @@ def WriteToFile(DATA,
 
     plt.savefig(os.path.join(DarkDir,'cd_scatter'+ofile1+ofile2+ofile3+'_run'+str(j-1)+'.png'), format='png')
 
-    #mct add file save for cd vs height
+    #if you want file save for cd vs height
 #    from astropy.io import ascii
 #    ascii.write( [hei_col, cd], DarkFile + '_cd_vs_height.csv', format = 'csv')
 
@@ -778,10 +767,8 @@ if __name__ == '__main__':
                 help="Mass of the meteoroid, kg (default='fall-line')")
         parser.add_argument("-d", "--density", type=float, default=3500.,
                 help="Density of the meteoroid (default=3500[kg/m3])")
-        parser.add_argument("-s", "--shape", type=str, default='s', #mct choices=['s','c','b'],
+        parser.add_argument("-s", "--shape", type=str, default='s', 
                 help="Specify the meteorite shape for the darkflight (default=cylinder)")
-#        parser.add_argument("-sp", "--sphericity", type=float, default=1.0, #mct
-#                help="Specify the meteorite sphericity (default=1)")
         parser.add_argument("-g", "--h_ground", type=str, default='0.0',
                 help="Height of the ground at landing site (m), float or 'a' for auto")
         parser.add_argument("-k", "--kml", action="store_false", default=True,
@@ -826,9 +813,9 @@ if __name__ == '__main__':
                 "-v {'eks', 'grits' or 'raw'}")
             exit(1)     
 
-#        shape_err = 0.15 # <--- VERY sensitive to shape! #mct 0.01 originally
-#        mass_err = 0.05 # <--- Only used if a mass is given #mct was 0.1. this is *factor, not %
-        rho_err = 1.0 #[kg/m3] #mct from 100
+#        shape_err = 0.15 # <--- VERY sensitive to shape! 
+#        mass_err = 0.05 # <--- Only used if a mass is given. this is *factor, not %
+        rho_err = 1.0 #[kg/m3] 
         vel_mag_err = 100.0 #[m/s]
         winddir_err = 0.0
     

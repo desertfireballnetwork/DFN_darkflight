@@ -6,7 +6,9 @@ setup
 It is easiest to run in a conda environment. install anaconda or miniconda, setup conda environment:
 conda create --name darkflight_env --file df_conda_spec.txt
 
-additionally, you need to setup STRM.py, see comment in DFN_darkflight.py for details.
+additionally, you need to setup the library STRM.py, see comment in DFN_darkflight.py for details.
+The STRM data is downloaded to a cache, which is stored in a hardcoded directory within darkflight.py
+this is currently hardcoded to /home/dfn-user/. you need to modify this.
 
 additionally you need nrlmsise atmosphere model, python interface, from:
 https://github.com/DeepHorizons/Python-NRLMSISE-00.git
@@ -14,6 +16,7 @@ to provide the following files in the same folder:
    nrlmsise_00_data.py
    nrlmsise_00_header.py
    nrlmsise_00.py
+the version in pypi is out of date, you need the git version.
 
 usage
 -----
