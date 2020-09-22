@@ -11,10 +11,10 @@ this is currently hardcoded to `/home/dfn-user/`, you need to modify this line i
 
 Additionally you need nrlmsise atmosphere model python interface, from:
 https://github.com/DeepHorizons/Python-NRLMSISE-00.git
-to provide the following files in the same folder ad DFN_darkflight.py:
-   nrlmsise_00_data.py
-   nrlmsise_00_header.py
-   nrlmsise_00.py
+to provide the following files in the same folder as DFN_darkflight.py: 
+   nrlmsise_00_data.py 
+   nrlmsise_00_header.py 
+   nrlmsise_00.py 
 The version in pypi is out of date, you need the git version.
 
 ## usage
@@ -59,7 +59,7 @@ python DFN_darkflight.py <options>
 ```
 
 ## notes
-for monte carlo:
+for Montecarlo:
 `-s 1.4 -se 0.15` will simulate drags of ~1.2 to ~1.6, matching the drag range of sphere to rounded brick
 
 If your system is set up appropriately, you can do:
