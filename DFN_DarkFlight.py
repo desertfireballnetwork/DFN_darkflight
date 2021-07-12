@@ -29,8 +29,10 @@ import sys
 import copy
 import argparse
 import datetime
+import warnings
 
 import numpy as np
+np.seterr(all='warn')
 import astropy.units as u
 from astropy.time import Time
 from numpy.linalg import norm
@@ -72,10 +74,12 @@ def EarthDynamics(t, X, WindData, t0, return_abs_mag=False):
     ''' Atmospheric Drag Perturbation - Better Model Needed '''
     Pos_ECEF = ECI2ECEF_pos(Pos_ECI, t_jd)
     Pos_LLH = ECEF2LLH(Pos_ECEF)
+    # print( 'tllh,', t, Pos_LLH[2])
     # Atmospheric velocity
     if type(WindData) == Table: #1D vertical profile
         maxwindheight = max(WindData['# Height'])
-        if float(Pos_LLH[2]) > maxwindheight: 
+        if float(Pos_LLH[2]) > maxwindheight:
+            print( 'exceed max height ', float(Pos_LLH[2]), maxwindheight) 
             [v_atm, rho_a, temp] = AtmosphericModel( [], Pos_ECI, t_jd)
         else:
             [v_atm, rho_a, temp] = AtmosphericModel( WindData, Pos_ECI, t_jd)
@@ -97,13 +101,27 @@ def EarthDynamics(t, X, WindData, t0, return_abs_mag=False):
     cd = dragcoeff(v, temp, rho_a, A)[0]
 
     # Total drag perturbation
-    a_drag = -cd * A * rho_a * v * v_rel / (2 * M**(1./3) * rho**(2./3))
-    
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error')
+        try:
+            a_drag = -cd * A * rho_a * v * v_rel / (2 * M**(1./3) * rho**(2./3))
+        except Warning:
+            print( '\ndrag error, cd, A, rho_a, v, v_rel, M, rho')
+            print( 'drag error, ', cd, A, rho_a, v, v_rel, M, rho)
+            exit()
+
     ''' Total Perturbing Acceleration '''
     a_tot = a_grav + a_drag
 
     # Mass-loss equation
-    dm_dt = -c_ml * A * rho_a * v**3 * M**(2./3) / (2 * rho**(2./3))
+    with warnings.catch_warnings():
+        warnings.filterwarnings('error')
+        try:
+            dm_dt = -c_ml * A * rho_a * v**3 * M**(2./3) / (2 * rho**(2./3))
+        except Warning:
+            print( '\nml error, c_ml, A, rho_a, v, M, rho')
+            print( 'ml error, ', c_ml, A, rho_a, v, M, rho)
+            exit()
 
     # See (Sansom, 2019) as reference
     if return_abs_mag: # sigma = c_ml / cd
@@ -236,7 +254,7 @@ def InitialiseMC(TriData, velType, mass, rho, shape,
         #M = truncnorm(
         #    (lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma, size=mc)a
     else:
-        M = np.random.uniform(0.01, 10, mc)
+        M = np.random.uniform(0.01, 10, mc) #fall line from 0 to 10kg
     print('mass, ', M)
 
     # Position errors (CTE's) ---------------------------------------------------- 
@@ -266,6 +284,7 @@ def InitialiseCFG(TriData, mass, rho, shape, mc):
     lat = np.deg2rad(Config.getfloat('met', 'lat0'))
     lon = np.deg2rad(Config.getfloat('met', 'lon0'))
     hei = Config.getfloat('met', 'z0')
+    print('inital LLH, ', lat, lon, hei)
     if mc:
         lat_err = np.deg2rad(Config.getfloat('met', 'dlat'))
         lon_err = np.deg2rad(Config.getfloat('met', 'dlon'))
@@ -275,7 +294,7 @@ def InitialiseCFG(TriData, mass, rho, shape, mc):
         hei = np.random.normal(hei, hei_err, mc)
     Pos_LLH0 = np.vstack((lat, lon, hei))
     Pos_ECEF0 = LLH2ECEF(Pos_LLH0)
-
+    
     # Velocity
     vel = Config.getfloat('met', 'vtot0')
     zen = np.deg2rad(Config.getfloat('met', 'zenangle'))
@@ -293,7 +312,7 @@ def InitialiseCFG(TriData, mass, rho, shape, mc):
     else:
         Vel_ECEF0 = ENU2ECEF(lon, lat).dot(Vel_ENU0)
 
-    # Time - no time in config file..
+    # Time 
     t0 = Time(Config.get('met', 'exposure_time'), format='isot', scale='utc').jd
     # t0 = np.array([2451545.0]) # 2000-01-01T12:00:00 
     if mc:
@@ -304,8 +323,8 @@ def InitialiseCFG(TriData, mass, rho, shape, mc):
         M = np.array([mass])
     elif type(mass) == np.ndarray:
         M = mass
-    else:
-        # M = [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    else: #various mass range options for a fall line from cfg - choose your preferred
+        # M = np.array[0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
         M = np.array([0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0 ])
         # M = np.concatenate((M, 1.5*M, 1.25*M, 1.75*M))
     if not rho:
@@ -325,15 +344,16 @@ def InitialiseCFG(TriData, mass, rho, shape, mc):
         rho = truncnorm.rvs(loc=rho, scale=rho_err, a=0, b=np.inf, size=mc)
     
     ParameterDict = InitialiseParams(rho, shape)
-    A = ParameterDict['shape']; c_ml = ParameterDict['c_ml']
+    A = ParameterDict['shape']
+    c_ml = ParameterDict['c_ml']
 
     [Pos_ECI0, Vel_ECI0] = ECEF2ECI(Pos_ECEF0, Vel_ECEF0, t0)
-
 
     return {'time_jd':t0, 'pos_eci':Pos_ECI0, 'vel_eci':Vel_ECI0,
             'mass':M, 'rho':rho, 'shape':A, 'c_ml':c_ml, 'weight':np.ones(len(M))}
 
 def InitialiseParams(rho, shape):
+    '''initialise body parameters'''
     if isinstance(rho, float): rho = np.array([rho])
     
     # Shape and drag parameters <------- Assumption alert!!!
@@ -432,7 +452,8 @@ def Propagate(state0, args):
             #winddata[5] wind up
             #left untouched
 
-    elevation_data = srtm.get_data( local_cache_dir = SRTM_cache )
+    if h_ground == 'a':
+        elevation_data = srtm.get_data( local_cache_dir = SRTM_cache )
 
     # Initialise the time step
     #    R_sealevel = EarthRadius(ECEF2LLH(Pos_ECI)[0])
@@ -463,7 +484,7 @@ def Propagate(state0, args):
             return 0 # Continues integration
 
     # Setup integrator
-    dt0 = 0.1; dt_max = 3 #60 # sec 
+    dt0 = 0.01; dt_max = 3 #60 # sec 
     solver = ode(EarthDynamics).set_integrator('dopri5', \
         first_step=dt0, max_step=dt_max, rtol=1e-4) #'dop853', 
     solver.set_solout(solout)
@@ -619,7 +640,7 @@ def WriteToFile(DATA,
     elif ofile_ext == '.fits':
         DarkTable.write(DarkFile, format='fits')
     print('\nOutput has been written to: ' + DarkFile + '\n')
-    print( ','.join(['Impact point', DarkTable['longitude'][-1], DarkTable['latitude'][-1]]) )
+    print( ','.join(['Impact point', str(DarkTable['longitude'][-1]), str(DarkTable['latitude'][-1])]) )
     # Make a KML of the trajectory
     if kml:
         rootfile = DarkFile.rstrip('.ecsv')
@@ -800,7 +821,6 @@ if __name__ == '__main__':
         kml = args.kml
         geoj = args.geojson
         mc = args.MonteCarlo
-        thi = args.sphericity
         h_ground = args.h_ground
         traj_keyword = args.trajectorykeyword
         mass_err = args.mass_err
