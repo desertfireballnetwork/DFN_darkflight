@@ -146,6 +146,24 @@ def create_logger(traj_dir, key, log_level=logging.DEBUG):
     
     return log_file
 
+def extract_event_codename_from_path(path):
+    '''
+    Work out the event codename from a path
+    ex: 
+    the path "/home/NAS_clone/events_trello/DN160131_02/blah"
+    yields "DN160131_02"
+    raises a ValueError if cannot find it.
+    '''
+    
+    path_elements_list = path.split(os.sep)
+    for el in path_elements_list:
+        # regex to match standard dfn event naming scheme
+        if re.match('DN[0-9]{6}_[0-9]{2}', el):
+            return el
+    else:
+        raise ValueError('Event codename not found in path')
+    
+    
 
 def sanitize_dictionary_for_ascii_write(dic):
     '''
@@ -558,9 +576,14 @@ def is_type_pipeline(input_table, table_type_required):
     
     check_list = allowed_table_types[ttr]
     for col in check_list:
-        if not any(col in s for s in input_table.colnames):
+        if ttr == 'velocitic_modeled' and 'EKS_initial_velocity_all_cam' in input_table.meta and not np.isnan(input_table.meta['EKS_initial_velocity_all_cam']):
+            # now that EKS_D_DT is no longer in tables, need to check metadata instead. 
+            continue
+        
+        elif not any(col in s for s in input_table.colnames):
             logger.debug('current Table is NOT ' + table_type_required)
             return False
+
         else:
             continue
     
@@ -1004,7 +1027,7 @@ def print_end_parameters(event_directory):
     # scroll though each camera
     try:
         dic = kp['all']
-        print('{},{},{},{}'.format(dic['datetime'], dic['latitude_end'], dic['longitude_end'], dic['H_end']))
+        print('{},{},{},{}'.format(dic['datetime'], dic['final_latitude'], dic['final_longitude'], dic['final_height']))
     except:
         print('Error finding info in key parameters file {}'.format(yaml_file))
         exit(1)

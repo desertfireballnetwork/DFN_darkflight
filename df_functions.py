@@ -19,6 +19,79 @@ from trajectory_utilities import ECEF2LLH, \
     ECI2ECEF_pos, ECEF2ECI_pos, OMEGA_EARTH
 from orbital_utilities import NRLMSISE_00
 
+# def Propagate(data, WindData, dt, met_rho):
+#     '''
+#     Inputs: Initial ECI position (m), ECI velocity (m/s), and mass (kgs).
+#     Outputs: ECI position (m), ECI velocity (m/s) throughout the dark flight.
+#     '''
+
+#     init_x = copy.deepcopy(data[1:11]) # Add mass to the state 
+#     param = [WindData, met_rho]
+
+#     ##integration:
+#     ode_output = scipy.integrate.odeint(EarthDynamics, init_x, [0, dt], args = (param,)) 
+
+#     ## set new particle
+#     data[0] += dt       #float(str( Time(data[0], format='jd') + TimeDelta(dt, format='sec')))
+#     data[1:11] = ode_output[1]
+#     #data[12:] = 
+
+#     return data
+
+# def EarthDynamics(X, t, params):
+#     '''
+#     The state rate dynamics are used in Runge-Kutta integration method to 
+#     calculate the next set of equinoctial element values.
+#     ''' 
+#     [WindData, met_rho] = params
+#     mu_e = 3.986005000e14 #4418e14 # Earth's standard gravitational parameter (m3/s2)
+#     w_e = 7.2921158553e-5  # Earth's rotation rate (rad/s)
+
+#     ## State Rates 
+#     # State parameter vector decomposed
+#     Pos_ECI = np.vstack((X[:3]))
+#     Vel_ECI = np.vstack((X[3:6]))
+#     kappa_no_drag = X[7] / 1.3
+#     A = kappa_no_drag * met_rho**(2./3)
+#     M = X[6]
+#     S = X[9]
+#     sig = X[8]
+#     mu = 2./3
+
+#     ## Primary Gravitational Acceleration 
+#     grav = - mu_e * Pos_ECI / norm(Pos_ECI)**3
+    
+#     ## Atmospheric Drag Perturbation - Better Model Needed '''
+#     # Atmospheric velocity
+#     [v_wind, rho_a, temp] = AtomosphericModel(WindData, Pos_ECI)
+#     v_rot = np.cross(np.vstack((0, 0, w_e)), Pos_ECI, axis=0)
+#     v_atm = v_rot + v_wind
+
+#     # Velocity relative to the atmosphere
+#     v_rel = Vel_ECI - v_atm
+#     v = norm(v_rel, axis=0)
+
+#     # Cross-sectional area <------- Assumption alert!!!
+#     d = 2 * np.sqrt(S / np.pi) # Diameter of meteoroid (m)
+    
+#     # Constants for drag coeff
+#     mu_a = viscosity(temp) # Air Viscosity (Pa.s)
+#     mach = v / SoS(temp) # Mach Number
+#     re = reynolds(rho_a, v, mu_a, A) # Reynolds Number
+#     kn = knudsen(mach, re) # Knudsen Number
+#     Cd = dragcoef(re, mach, kn, d) # Drag Coefficient
+#     #Cd = 2.0 # Approximation
+
+#     Xdot=[0., 0., 0., 0., 0., 0., 0., 0., 0., 0.]
+
+#     kv = 0.5 * kappa_no_drag  * rho_a
+#     km = kv * sig
+
+#     Xdot[:3] = Vel_ECI.reshape(3)
+#     Xdot[3:6] = (-kv * Cd * abs(M)**(mu-1) * v * v_rel + grav).reshape(3)
+#     Xdot[6] = -km * Cd * v**3 * abs(M)**mu
+
+#     return Xdot
 
 def density_from_pressure(temperature, pressure, RH):
     """returns atmospheric density, (kg/m3)
@@ -73,9 +146,7 @@ def AtmosphericModel(WindData, Pos_ECI, t_jd):
     
     if len(WindData):
 
-#        Pos_LLH = ECEF2LLH(Pos_ECI) # There is a max of +-40m height error here
-        Pos_ECEF = ECEF2LLH(Pos_ECI)
-        Pos_LLH = ECEF2LLH(Pos_ECEF)
+        Pos_LLH = ECEF2LLH(Pos_ECI) # There is a max of +-40m height error here
         h = float(Pos_LLH[2]) # (m)
 
         # Get the relevent wind data from that height
@@ -102,7 +173,11 @@ def AtmosphericModel(WindData, Pos_ECI, t_jd):
             Press = WindData['Press'][i] # (Pa)
             RHum = WindData['RHum'][i] # (%)
         else:
-            input('There is a problem in AtomosphericModel.')
+            print('There is a problem in AtomosphericModel.')
+            print(Pos_ECI)
+            print(min(WindData['# Height']))
+            print(max(WindData['# Height']))
+            exit()
         
         # Calculate the atmospheric density
         rho_a = density_from_pressure(TempK, Press, RHum) # (kg/m3)
@@ -121,19 +196,60 @@ def AtmosphericModel(WindData, Pos_ECI, t_jd):
         Wind_ECI = np.dot(C_ENU2ECI, Wind_ENU) + v_rot
 
     else:
-        #no winds, use NRLMSISE model
         Pos_ECEF = ECI2ECEF_pos(Pos_ECI, t_jd)
         Pos_LLH = ECEF2LLH(Pos_ECEF)
         h = float(Pos_LLH[2]) # (m)
+
         [TempK, Press, rho_a] = NRLMSISE_00(Pos_LLH, t_jd, pos_type='llh')[:3]
+
+        # Assume no wind
         Wind_ENU = np.vstack(( 0, 0, 0))
         Wind_ECI = v_rot
+
+    # else:
+    #     '''
+    #     The atmospheric density using NASA's Earth Atmosphere Model.
+    #     Input height above sea level (m).
+    #     Outputs the atmospheric density (kg/m3) and the temperature (K) at the
+    #     inputted height.
+    #     Source: www.grc.nasa.gov/WWW/k-12/airplane/atmosmet.html
+    #     '''
+    
+    #     # Upper Stratosphere
+    #     if h >= 25000:  # (m)
+    #         T = -131.21 + 0.00299 * h + 273.15  # (deg K)
+    #         p = 2.488 * (T / 216.6)**(-11.388)  # (kPa)
+    
+    #     # Lower Stratosphere
+    #     elif h >= 11000 and h < 25000:  # (m)
+    #         T = -56.46 + 273.15  # (deg K)
+    #         p = 22.65 * np.exp(1.73 - 0.000157 * h)  # (kPa)
+    
+    #     # Troposphere
+    #     elif h >= 0 and h < 11000:  # (m)
+    #         T = 15.04 - 0.00649 * h + 273.15  # (deg K)
+    #         p = 101.29 * (T / 288.08)**(5.256)  # (kPa)
+    
+    #     elif h < 0:  # (m)
+    #         T = 15.04 + 273.15  # (deg K)
+    #         p = 101.29 * (T / 288.08)**(5.256)  # (kPa)
+    
+    #     else:
+    #         print('Error: Consult ADM function')
+    #         exit()
+    
+    #     # Air Density (kg/m3)
+    #     rho_a = p / (0.2869 * T)
+    #     TempK = T
+
+    #     # Assume no wind
+    #     Wind_ENU = np.vstack(( 0, 0, 0))
+    #     Wind_ECEF = np.vstack(( 0, 0, 0))
 
     # Save the variables
     WRF_history.append( np.vstack((h, Wind_ENU, rho_a, TempK)) )
 
     return Wind_ECI, rho_a, TempK
-
 
 from netCDF4 import Dataset
 def WindDataExtraction(WindFileName, t0):
@@ -180,17 +296,15 @@ def WindDataExtraction(WindFileName, t0):
 import warnings
 from wrf import interplevel
 def WRF3D(WindArray, Pos_LLH):
-    # Interpolates spatially
+    # Interpolates spacially
 
     # Assign the lat/lon/hei and find height variation in the model
     [[lat],[lon],[hei]] = [np.rad2deg(Pos_LLH[0]), np.rad2deg(Pos_LLH[1]), Pos_LLH[2]]
 
     # Find xy positions of the lat/lon
     ang_dist2 = (WindArray[0,0] - lat)**2 + (WindArray[1,0] - lon)**2
-    min_index = np.argmin(ang_dist2)
-    ncol = WindArray.shape[3]
-    xid = min_index % ncol
-    yid = min_index // ncol
+    min_index = np.argmin(ang_dist2); ncol = WindArray.shape[3]
+    xid = min_index % ncol; yid = min_index // ncol
 
     lat_var = WindArray[0,0,yid-1:yid+2,xid-1:xid+2] #[3,3]
     lon_var = WindArray[1,0,yid-1:yid+2,xid-1:xid+2] #[3,3]
@@ -198,13 +312,13 @@ def WRF3D(WindArray, Pos_LLH):
 
     # Find the variable at a certain altitude as a 2D array [3,3] #linear interpolation!
     interp_horiz = lambda entry_no: interplevel(
-        field3d = WindArray[entry_no, :, yid-1:yid+2, xid-1:xid+2], 
-                            vert = hei_var, desiredlev = hei, missing = np.nan).data #<---RuntimeWarning originates from here
+        field3d=WindArray[entry_no,:,yid-1:yid+2,xid-1:xid+2], 
+        vert=hei_var, desiredlev=hei, missing=np.nan).data #<---RuntimeWarning originates from here
 
     # 2D interpolate [1,]
     latlon = np.vstack((lat_var.flatten(), lon_var.flatten())).T
-    interp2pt = lambda entry_no: griddata( latlon, 
-                                    interp_horiz(entry_no).flatten(), np.array([lat,lon]) )
+    interp2pt = lambda entry_no: griddata(latlon, 
+        interp_horiz(entry_no).flatten(), np.array([lat,lon]))
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -225,4 +339,39 @@ def WRF3D(WindArray, Pos_LLH):
 
     return Wind_ENU, rho_a, tk
 
+# from wrf import getvar, interplevel, interpline, CoordPair
+# def WRF_3D(data, Pos_LLH):
+
+#     # Assign the lat/lon/hei and find height variation in the model
+#     [lat,lon,hei] = [np.rad2deg(Pos_LLH[0]), np.rad2deg(Pos_LLH[1]), Pos_LLH[2]]
+#     hei_var = getvar(data, 'z')
+
+#     # Find the variable at a certain altitude as a 2D array
+#     interp_horiz = lambda field, val: interplevel(field3d=getvar(data, field), 
+#         vert=hei_var, desiredlev=hei, missing=np.nan)
+#     wen_2D = interp_horiz('uvmet') # Wind east/north [m/s]
+#     wu_2D = interp_horiz('wa') # Wind up [m/s]
+#     tk_2D = interp_horiz('tk') # Temperature [K]
+#     pr_2D = interp_horiz('p') # Pressure [Pa]
+#     rh_2D = interp_horiz('rh') # Relative humidity []
+
+#     # Stack the variables for interpolation [we, wn, wu, tempK, pres, RH]
+#     variable_stack = np.vstack((wen_2D, np.dstack(wu_2D.T),np.dstack(tk_2D.T),
+#                                 np.dstack(pr_2D.T), np.dstack(rh_2D.T)))
+#     try:
+#         [we, wn, wu, tempK, pres, RH] = interpline(variable_stack, wrfin=data, latlon=True,
+#             start_point=CoordPair(lat=lat, lon=lon), end_point=CoordPair(lat=lat, lon=lon+0.1))[:,0]
+#     except:
+#         [we, wn, wu, tempK, pres, RH] = interpline(variable_stack, wrfin=data, latlon=True,
+#             start_point=CoordPair(lat=lat, lon=lon), end_point=CoordPair(lat=lat, lon=lon-0.1))[:,0]
+
+#     # Compare:
+#     rho_a = density_from_pressure(tempK, pres, RH)
+#     if np.isnan(rho_a): [we, wn, wu, rho_a, tempK] = WRF_history[-1]
+#     Wind_ENU = np.vstack((we, wn, wu))
+
+#     # Save the variables
+#     WRF_history.append( np.vstack((Wind_ENU, rho_a, tempK)) )
+
+#     return Wind_ENU, rho_a, tempK
 

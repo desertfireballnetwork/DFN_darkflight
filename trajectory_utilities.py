@@ -200,7 +200,6 @@ def calculate_timing_offsets(pos_all, t_jd_all, cam_no_all, cleared_cameras=None
     # ^--- moved away from a telescope defined dictionary
     # in the case of the same camera across multiple images
 
-    print(offset_dict)
     return offset_dict
 
 #########################################################
@@ -251,10 +250,11 @@ def get_zenith_and_bearing(table, segment):
     except AttributeError:
         zenith = np.rad2deg(np.arctan2(np.sqrt(E**2 + N**2), abs(U))) * u.deg
     
+    # these are the same, what's the point?
     try:
-        bearing = (np.arctan2(E, N)* u.rad).to(u.deg) % (360 * u.deg)
+        bearing = (np.arctan2(E, N)).to(u.deg) % (360 * u.deg)
     except:
-        bearing = (np.arctan2(E, N)  * u.rad).to(u.deg) % (360 * u.deg)
+        bearing = (np.arctan2(E, N) * u.rad).to(u.deg) % (360 * u.deg)
     
     return zenith, bearing
 
