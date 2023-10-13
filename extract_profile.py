@@ -188,24 +188,51 @@ def main(wrf_file, ref_lat, ref_lon, ref_time):
     df.to_csv(ofname, index=False)
 
 
+def parse_simple_config(ifile):
+    from configparser import ConfigParser
+    from itertools import chain
+
+    parser = ConfigParser()
+    with open(ifile) as lines:
+        # add a dummy section header because ConfigParser can't bloody deal with a simple config file
+        lines = chain(("[dummy_section]",), lines) 
+        parser.read_file(lines)
+    return parser['dummy_section']
+
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser(description='Extract vertical profile from WRF')
+    parser = argparse.ArgumentParser(description='Extract vertical profile from WRF. Either provide a WRF bash config file, OR set lat/long/time.')
     parser.add_argument("-w", "--WRF", type=str, required=True, help="path to WRF file")
-    parser.add_argument("-lat", type=str, required=True, help="latitude (decimal degrees, WGS84)")
-    parser.add_argument("-lon", type=str, required=True, help="longitude (decimal degrees, WGS84)")
-    parser.add_argument("-time", type=str, required=True, help="UTC time (ISO 8601 string, e.g. 2020-08-14T18:30:00)")
+
+    parser.add_argument("-i", "--ifile", type=str, help="path to WRF config file")
+
+    parser.add_argument("-lat", type=str, help="latitude (decimal degrees, WGS84)")
+    parser.add_argument("-lon", type=str, help="longitude (decimal degrees, WGS84)")
+    parser.add_argument("-time", type=str, help="UTC time (ISO 8601 string, e.g. 2020-08-14T18:30:00)")
 
     args = parser.parse_args()
-    
-    
-    ref_time = args.time
-    ref_lon = float(args.lon)
-    ref_lat = float(args.lat)
+
+    if args.ifile:
+        if not os.path.isfile(args.ifile):
+            print(f'path to WRF config file invalid ({args.ifile})')
+            exit(1)
+        conf = parse_simple_config(args.ifile)
+        ref_time = conf['EVENT_TIME'].replace('"', '')
+        ref_lon = float(conf['EVENT_LON'].replace('"', ''))
+        ref_lat = float(conf['EVENT_LAT'].replace('"', ''))
+    else:
+        if not args.time or not args.lon or not args.lat:
+            print()
+            parser.print_help()
+            exit(1)
+        ref_time = args.time
+        ref_lon = float(args.lon)
+        ref_lat = float(args.lat)
     
     wrf_file = args.WRF
     if not os.path.isfile(wrf_file):
         print(f'path to WRF file invalid ({wrf_file})')
+        exit(1)
 
     main(wrf_file, ref_lat, ref_lon, ref_time)
 
