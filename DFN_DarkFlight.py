@@ -77,7 +77,7 @@ def EarthDynamics(t, X, WindData, t0, return_abs_mag=False):
     # print( 'tllh,', t, Pos_LLH[2])
     # Atmospheric velocity
     if type(WindData) == Table: #1D vertical profile
-        maxwindheight = max(WindData['# Height'])
+        maxwindheight = np.max(WindData['# Height'])
         if float(Pos_LLH[2]) > maxwindheight:
             print( 'exceed max height ', float(Pos_LLH[2]), maxwindheight) 
             [v_atm, rho_a, temp] = AtmosphericModel( [], Pos_ECI, t_jd)
@@ -85,7 +85,7 @@ def EarthDynamics(t, X, WindData, t0, return_abs_mag=False):
             [v_atm, rho_a, temp] = AtmosphericModel( WindData, Pos_ECI, t_jd)
 
     else: #3D wind profile
-        maxwindheight = max(WindData[2,:,:,:])
+        maxwindheight = np.amax(WindData[2,:,:,:])
         if float(Pos_LLH[2]) > maxwindheight:
             [v_atm, rho_a, temp] = AtmosphericModel( [], Pos_ECI, t_jd)
         else:
@@ -874,9 +874,17 @@ if __name__ == '__main__':
         # Read in the wind data (actually the full atmosphere data!)
         if WindFile and os.path.exists(WindFile):
             if WindFile.endswith('.csv'):
-                WindData = Table.read(WindFile, format='ascii.csv', guess=False, delimiter=',',
-                #some headers missing in older files? just overwrite them all!
-                            names = ('# Height', 'TempK', 'Press', 'RHum', 'Wind', 'WDir') )
+                wind_read_table = Table.read(WindFile, format='ascii.csv')
+                if '# Height' not in wind_read_table.colnames:
+                    WindData = Table()
+                    WindData['# Height'] = wind_read_table['height']
+                    WindData['TempK'] = wind_read_table['temperature']
+                    WindData['Press'] = wind_read_table['pressure']
+                    WindData['RHum'] = wind_read_table['relative_humidity']
+                    WindData['Wind'] = wind_read_table['wind_horizontal']
+                    WindData['WDir'] = wind_read_table['wind_direction']
+                else:
+                    WindData = wind_read_table
                 WindFile = os.path.basename(WindFile)
                 ofile2 = '_'+WindFile.split('.')[0].split('_')[-1]+'Wind' 
                 print( 'wind csv load')
